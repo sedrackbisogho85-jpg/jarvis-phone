@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#031a1d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>JARVIS</title>
+<style>
+  :root { --c:#35d6d6; }
+  body[data-state="error"] { --c:#ff3b3b; }
+  * { box-sizing:border-box; }
+  html, body {
+    margin:0; height:100%; overflow:hidden; background:#031a1d; color:#d6f3f3;
+    font-family:system-ui, sans-serif; -webkit-tap-highlight-color:transparent;
+  }
+  #app {
+    display:flex; flex-direction:column; height:100%;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    background:radial-gradient(circle at 50% 35%, #052a2e 0%, #000 75%);
+  }
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 14px; border-bottom:2px solid var(--c);
+    background:linear-gradient(rgba(53,214,214,.12), rgba(0,0,0,0));
+  }
+  h1 { margin:0; font-size:18px; letter-spacing:6px; font-weight:400; color:#d6f3f3; text-shadow:0 0 10px var(--c); }
+  button {
+    font:inherit; color:var(--c); background:rgba(2,26,30,.8);
+    border:1px solid var(--c); border-radius:10px; padding:10px 12px;
+  }
+  button:active { background:rgba(53,214,214,.25); }
+  #stage { flex:1; position:relative; min-height:200px; }
+  #orb { position:absolute; inset:0; width:100%; height:100%; }
+  #state { position:absolute; top:8px; left:12px; font-size:12px; letter-spacing:3px; color:var(--c); }
+  #chat {
+    height:27vh; overflow-y:auto; padding:8px 12px; font-size:14px;
+    background:rgba(2,26,30,.7); border-top:1px solid rgba(53,214,214,.4);
+  }
+  .msg { margin:6px 0; white-space:pre-wrap; user-select:text; }
+  .who { color:var(--c); font-weight:700; }
+  #bar { padding:8px 10px; background:rgba(2,26,30,.9); }
+  .row { display:flex; gap:6px; }
+  .row + .row { margin-top:6px; }
+  .row button { flex:1; }
+  #text {
+    flex:1; min-width:0; font:inherit; color:#e6f6f6; background:#02181b;
+    border:1px solid rgba(53,214,214,.5); border-radius:10px; padding:10px;
+  }
+  #sendBtn { flex:0 0 auto; }
+  #settings {
+    position:fixed; inset:0; z-index:5; display:none; overflow:auto;
+    padding:18px; background:rgba(3,26,29,.98);
+  }
+  #settings h2 { margin:0; color:var(--c); font-weight:400; letter-spacing:3px; }
+  #settings label { display:block; margin:14px 0 4px; color:var(--c); font-size:13px; letter-spacing:1px; }
+  #settings input, #settings select {
+    width:100%; font:inherit; color:#e6f6f6; background:#02181b;
+    border:1px solid rgba(53,214,214,.5); border-radius:10px; padding:10px;
+  }
+  #settings p { font-size:12px; opacity:.8; }
+</style>
+</head>
+<body data-state="idle">
+<div id="app">
+  <header><h1>J.A.R.V.I.S.</h1><button id="gear">Settings</button></header>
+  <div id="stage"><canvas id="orb"></canvas><div id="state">IDLE</div></div>
+  <div id="chat"></div>
+  <div id="bar">
+    <div class="row">
+      <button id="talkBtn">Talk</button>
+      <button id="lookBtn">Look</button>
+      <button id="readBtn">Read</button>
+    </div>
+    <div class="row">
+      <input id="text" placeholder="Type to JARVIS" autocomplete="off">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings">
+  <h2>SETTINGS</h2>
+  <label>Groq key (stays on this phone only)</label>
+  <input id="setKey" type="password" autocomplete="off" placeholder="paste your Groq key">
+  <label>Chat model (copy MODEL_NAME from your laptop config.py)</label>
+  <input id="setModel" type="text" autocomplete="off">
+  <label>Listening language (try another if he mishears you)</label>
+  <select id="setLang">
+    <option value="en-KE">English (Kenya)</option>
+    <option value="en-UG">English (Uganda)</option>
+    <option value="en-TZ">English (Tanzania)</option>
+    <option value="en-NG">English (Nigeria)</option>
+    <option value="en-ZA">English (South Africa)</option>
+    <option value="en-GB">English (UK)</option>
+    <option value="en-US">English (US)</option>
+  </select>
+  <label>Camera</label>
+  <select id="setCam">
+    <option value="environment">Back camera</option>
+    <option value="user">Front camera</option>
+  </select>
+  <p>Your key is saved only in this browser on this phone. Use a separate Groq key for the phone, so you can cancel it if the phone is lost.</p>
+  <div class="row" style="margin-top:16px">
+    <button id="saveBtn">Save</button>
+    <button id="closeBtn">Close</button>
+  </div>
+  <p id="setNote"></p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  function $(id) { return document.getElementById(id); }
+
+  // ---------- saved settings (kept on this phone only) ----------
+  var store = {
+    get: function (key, fallback) {
+      try { var v = localStorage.getItem(key); return v === null ? fallback : v; }
+      catch (e) { return fallback; }
+    },
+    set: function (key, value) {
+      try { localStorage.setItem(key, value); } catch (e) {}
+    }
+  };
+  var cfg = {
+    key: store.get("jv_key", ""),
+    model: store.get("jv_model", "llama-3.3-70b-versatile"),
+    lang: store.get("jv_lang", "en-KE"),
+    cam: store.get("jv_cam", "environment")
+  };
+
+  var VISION_MODELS = [
+    "qwen/qwen3.8-27b",
+    "qwen/qwen3.6-27b",
+    "meta-llama/llama-4-scout-17b-16e-instruct"
+  ];
+  var LOOK_PROMPT =
+    "You are the eyes of JARVIS, a voice assistant. Answer in three to five " +
+    "short, natural spoken sentences. No lists and no symbols. Say only what " +
+    "you can actually see, and say so if something is unclear.";
+  var READ_PROMPT =
+    "Read all the text visible in this picture and write it out exactly as " +
+    "written, line by line, in the same order. Do not add comments, " +
+    "descriptions or markdown. If there is no readable text, reply with " +
+    "exactly: NO TEXT";
+
+  function systemPrompt() {
+    return "You are JARVIS, a calm, confident, slightly witty assistant for a " +
+      "university Data Science student in Uganda. Address the user as sir " +
+      "naturally, about once per answer. Talk the way a fluent person talks " +
+      "to another person: warm, natural, complete sentences, usually two to " +
+      "five sentences unless sir asks for more detail. Never use bullet " +
+      "points, numbered lists, tables or symbols, because your words are " +
+      "spoken aloud. Explain things in simple English. The current date and " +
+      "time is " + new Date().toLocaleString() + ".";
+  }
+
+  // ---------- screen basics ----------
+  var talking = false;
+  var currentRec = null;
+  var speaking = false;
+  var history = [];
+
+  function setState(name) {
+    document.body.dataset.state = name;
+    $("state").textContent = name.toUpperCase();
+  }
+
+  function addMessage(who, text) {
+    var chat = $("chat");
+    var row = document.createElement("div");
+    row.className = "msg";
+    var name = document.createElement("span");
+    name.className = "who";
+    name.textContent = who + ": ";
+    row.appendChild(name);
+    row.appendChild(document.createTextNode(text));
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // ---------- Groq ----------
+  async function groqChat(model, messages, maxTokens) {
+    var res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + cfg.key
+      },
+      body: JSON.stringify({ model: model, messages: messages, max_tokens: maxTokens || 500 })
+    });
+    var data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) {
+      var err = new Error((data.error && data.error.message) || ("HTTP " + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    var text = (data.choices && data.choices[0] && data.choices[0].message &&
+                data.choices[0].message.content) || "";
+    return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  }
+
+  function friendlyError(e) {
+    if (e && e.status === 401) { return "Your Groq key was rejected. Open settings and check it, sir."; }
+    if (e && e.status === 429) { return "The rate limit was reached. Wait a little and try again, sir."; }
+    if (e && (e.status === 400 || e.status === 404)) {
+      return "That model name was not accepted. Open settings and copy MODEL_NAME from your laptop config, sir.";
+    }
+    if (e && e.name === "TypeError") { return "I cannot reach Groq. Check your internet, sir."; }
+    if (e && e.friendly) { return e.message; }
+    return "Something went wrong, sir. " + ((e && e.message) || "");
+  }
+
+  async function ask(text) {
+    history.push({ role: "user", content: text });
+    if (history.length > 16) { history.splice(0, history.length - 16); }
+    var messages = [{ role: "system", content: systemPrompt() }].concat(history);
+    var answer;
+    try {
+      answer = await groqChat(cfg.model, messages, 500);
+    } catch (e) {
+      history.pop();
+      throw e;
+    }
+    history.push({ role: "assistant", content: answer });
+    return answer;
+  }
+
+  async function vision(picture, prompt, maxTokens) {
+    var content = [
+      { type: "text", text: prompt },
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64," + picture } }
+    ];
+    var remembered = store.get("jv_vision", "");
+    var order = (remembered ? [remembered] : []).concat(
+      VISION_MODELS.filter(function (m) { return m !== remembered; })
+    );
+    var last = null;
+    for (var i = 0; i < order.length; i++) {
+      try {
+        var text = await groqChat(order[i], [{ role: "user", content: content }], maxTokens);
+        if (text) { store.set("jv_vision", order[i]); return text; }
+      } catch (e) {
+        if (e.status === 401 || e.status === 429 || e.name === "TypeError") { throw e; }
+        last = e;
+      }
+    }
+    var fail = new Error("None of the vision models answered, sir. " + ((last && last.message) || ""));
+    fail.friendly = true;
+    throw fail;
+  }
+
+  // ---------- speaking ----------
+  function pickVoice() {
+    if (!window.speechSynthesis) { return null; }
+    var voices = speechSynthesis.getVoices();
+    var uk = voices.filter(function (v) { return /en[-_]GB/i.test(v.lang); });
+    var male = uk.filter(function (v) { return /male/i.test(v.name) && !/female/i.test(v.name); });
+    var any = voices.filter(function (v) { return /^en/i.test(v.lang); });
+    return male[0] || uk[0] || any[0] || null;
+  }
+
+  function speakable(text) {
+    return String(text)
+      .split("\n\nSources:")[0]
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[*#`_>|]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function speakChunk(text) {
+    return new Promise(function (resolve) {
+      var u = new SpeechSynthesisUtterance(text);
+      var v = pickVoice();
+      if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = "en-GB"; }
+      u.pitch = 0.6;
+      u.rate = 1.0;
+      u.onend = resolve;
+      u.onerror = resolve;
+      speechSynthesis.speak(u);
+    });
+  }
+
+  async function speak(text) {
+    var clean = speakable(text);
+    if (!clean || !window.speechSynthesis) { return; }
+    var parts = clean.match(/[^.!?]+[.!?]*/g) || [clean];
+    speechSynthesis.cancel();
+    speaking = true;
+    for (var i = 0; i < parts.length && speaking; i++) {
+      var piece = parts[i].trim();
+      if (piece) { await speakChunk(piece); }
+    }
+    speaking = false;
+  }
+
+  function stopSpeaking() {
+    speaking = false;
+    if (window.speechSynthesis) { speechSynthesis.cancel(); }
+  }
+
+  // ---------- listening ----------
+  function listenOnce() {
+    return new Promise(function (resolve) {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { resolve({ error: "nosupport" }); return; }
+      var rec = new SR();
+      rec.lang = cfg.lang;
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.continuous = false;
+      var done = false;
+      function finish(result) {
+        if (done) { return; }
+        done = true;
+        try { rec.stop(); } catch (e) {}
+        resolve(result);
+      }
+      rec.onresult = function (e) { finish({ text: e.results[0][0].transcript }); };
+      rec.onerror = function (e) { finish({ error: e.error }); };
+      rec.onend = function () { finish({ error: "no-speech" }); };
+      currentRec = rec;
+      try { rec.start(); } catch (e) { finish({ error: "start-failed" }); }
+    });
+  }
+
+  // ---------- tasks and notes (saved on this phone) ----------
+  function loadList(key) {
+    try { return JSON.parse(store.get(key, "[]")) || []; } catch (e) { return []; }
+  }
+  function saveList(key, list) { store.set(key, JSON.stringify(list)); }
+
+  function addTask(text) {
+    var list = loadList("jv_tasks");
+    list.push(text.trim());
+    saveList("jv_tasks", list);
+    return "Added to your tasks, sir: " + text.trim() + ".";
+  }
+  function listTasks() {
+    var list = loadList("jv_tasks");
+    if (!list.length) { return "You have no open tasks, sir."; }
+    return "You have " + list.length + " open " + (list.length === 1 ? "task" : "tasks") + ". " +
+      list.map(function (t, i) { return "Number " + (i + 1) + ", " + t + "."; }).join(" ");
+  }
+  function finishTask(n) {
+    var list = loadList("jv_tasks");
+    if (n < 1 || n > list.length) { return "I do not have a task number " + n + ", sir."; }
+    var gone = list.splice(n - 1, 1)[0];
+    saveList("jv_tasks", list);
+    return "Done, sir. I removed: " + gone + ".";
+  }
+  function addNote(text) {
+    var list = loadList("jv_notes");
+    list.push(text.trim());
+    saveList("jv_notes", list);
+    return "Note saved, sir.";
+  }
+  function listNotes() {
+    var list = loadList("jv_notes");
+    if (!list.length) { return "You have no notes yet, sir."; }
+    return "Your latest notes: " + list.slice(-3).join(". ") + ".";
+  }
+
+  // ---------- camera ----------
+  async function grabPicture(maxSide) {
+    var stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: cfg.cam }, width: { ideal: 1600 } },
+        audio: false
+      });
+    } catch (e) {
+      var denied = new Error("I could not open the camera. Allow camera access for this app, sir.");
+      denied.friendly = true;
+      throw denied;
+    }
+    try {
+      var video = document.createElement("video");
+      video.setAttribute("playsinline", "");
+      video.muted = true;
+      video.srcObject = stream;
+      await video.play();
+      await new Promise(function (r) { setTimeout(r, 900); });
+      var w = video.videoWidth, h = video.videoHeight;
+      var scale = Math.min(1, maxSide / Math.max(w, h));
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+    } finally {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+  }
+
+  function cut(text) {
+    if (text.length <= 600) { return text; }
+    var piece = text.slice(0, 600);
+    var end = Math.max(piece.lastIndexOf(". "), piece.lastIndexOf("\n"), piece.lastIndexOf(" "));
+    return piece.slice(0, end > 200 ? end : 600).trim() + " and so on.";
+  }
+
+  async function camera(kind, userText) {
+    if (!cfg.key) { var e0 = new Error("Add your Groq key in settings first, sir."); e0.friendly = true; throw e0; }
+    setState("thinking");
+    if (kind === "look") {
+      var picture = await grabPicture(1024);
+      var seen = await vision(picture, LOOK_PROMPT + " Sir's request: " + (userText || "Describe what you see."), 400);
+      history.push({ role: "assistant", content: "I looked through the camera and saw: " + seen });
+      return seen;
+    }
+    var page = await grabPicture(1600);
+    var text = await vision(page, READ_PROMPT, 1200);
+    if (/^NO TEXT/i.test(text)) {
+      return "I could not find any readable text, sir. Hold it closer, steady, and in good light.";
+    }
+    var lowered = (userText || "").toLowerCase();
+    var parts = [];
+    if (/\btasks?\b/.test(lowered)) {
+      var lines = text.split("\n").map(function (l) { return l.replace(/^[\s\-*]+/, "").trim(); })
+                      .filter(Boolean).slice(0, 10);
+      lines.forEach(function (l) { addTask(l.slice(0, 120)); });
+      parts.push("I added " + lines.length + (lines.length === 1 ? " task" : " tasks") + " to your list, sir.");
+    } else {
+      parts.push(cut(text));
+    }
+    if (/\b(save|note)\b/.test(lowered) || text.length > 600) {
+      addNote(text);
+      parts.push("I saved the full text as a note.");
+    }
+    history.push({ role: "assistant", content: "I read this text through the camera: " + text.slice(0, 1500) });
+    return parts.join(" ");
+  }
+
+  // ---------- what to do with what sir said ----------
+  async function route(text) {
+    var t = text.toLowerCase().trim();
+    var m;
+    if (/\b(read this|read that|what does it say|what is written|read the text)\b/.test(t)) {
+      return await camera("read", text);
+    }
+    if (/\b(what do you see|what can you see|look at this|scan|what is this|describe this)\b/.test(t)) {
+      return await camera("look", text);
+    }
+    if ((m = t.match(/^(?:add|new) (?:a )?task (?:to |that )?(.+)/)) ||
+        (m = t.match(/^remind me to (.+)/))) {
+      return addTask(m[1]);
+    }
+    if (/\b(my tasks|list (my )?tasks|what are my tasks|open tasks)\b/.test(t)) { return listTasks(); }
+    if ((m = t.match(/\b(?:finish|complete|remove|delete|tick off)(?: task)?(?: number)? (\d+)/))) {
+      return finishTask(parseInt(m[1], 10));
+    }
+    if ((m = t.match(/^(?:save a note|take a note|note)[:,]? (.+)/))) { return addNote(m[1]); }
+    if (/\b(my notes|read my notes|list notes)\b/.test(t)) { return listNotes(); }
+    if (/\b(what('s| is) the time|what time is it)\b/.test(t)) {
+      return "It is " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ", sir.";
+    }
+    if (!cfg.key) { var e1 = new Error("Add your Groq key in settings first, sir."); e1.friendly = true; throw e1; }
+    return await ask(text);
+  }
+
+  async function handleText(text) {
+    addMessage("You", text);
+    setState("thinking");
+    var reply, failed = false;
+    try { reply = await route(text); }
+    catch (e) { reply = friendlyError(e); failed = true; }
+    addMessage("JARVIS", reply);
+    setState(failed ? "error" : "speaking");
+    await speak(reply);
+    setState("idle");
+  }
+
+  async function conversation() {
+    if (talking) {
+      talking = false;
+      stopSpeaking();
+      try { if (currentRec) { currentRec.abort(); } } catch (e) {}
+      setState("idle");
+      return;
+    }
+    if (!cfg.key) { openSettings(); return; }
+    talking = true;
+    var quiet = 0;
+    while (talking) {
+      setState("listening");
+      var r = await listenOnce();
+      if (!talking) { break; }
+      if (r.error === "not-allowed" || r.error === "service-not-allowed") {
+        addMessage("JARVIS", "The microphone is blocked. Allow it in the browser settings, then tap Talk again, sir.");
+        break;
+      }
+      if (r.error === "nosupport") {
+        addMessage("JARVIS", "This browser cannot listen. Use Chrome, or type below, sir.");
+        break;
+      }
+      if (r.error === "network") {
+        addMessage("JARVIS", "Listening needs the internet, sir. Check your connection.");
+        break;
+      }
+      if (!r.text) {
+        quiet += 1;
+        if (quiet >= 4) { break; }
+        continue;
+      }
+      quiet = 0;
+      var words = r.text.toLowerCase().split(/\s+/).map(function (w) { return w.replace(/[.,!?]/g, ""); });
+      if (words.length <= 3 && words.some(function (w) { return w === "stop" || w === "goodbye" || w === "bye"; })) {
+        addMessage("You", r.text);
+        addMessage("JARVIS", "Understood, sir.");
+        break;
+      }
+      await handleText(r.text);
+    }
+    talking = false;
+    setState("idle");
+  }
+
+  // ---------- buttons ----------
+  function openSettings() {
+    $("setKey").value = cfg.key;
+    $("setModel").value = cfg.model;
+    $("setLang").value = cfg.lang;
+    $("setCam").value = cfg.cam;
+    $("setNote").textContent = "";
+    $("settings").style.display = "block";
+  }
+  $("gear").addEventListener("click", openSettings);
+  $("closeBtn").addEventListener("click", function () { $("settings").style.display = "none"; });
+  $("saveBtn").addEventListener("click", function () {
+    cfg.key = $("setKey").value.trim();
+    cfg.model = $("setModel").value.trim() || "llama-3.3-70b-versatile";
+    cfg.lang = $("setLang").value;
+    cfg.cam = $("setCam").value;
+    store.set("jv_key", cfg.key);
+    store.set("jv_model", cfg.model);
+    store.set("jv_lang", cfg.lang);
+    store.set("jv_cam", cfg.cam);
+    $("setNote").textContent = "Saved, sir.";
+    setTimeout(function () { $("settings").style.display = "none"; }, 600);
+  });
+
+  $("talkBtn").addEventListener("click", conversation);
+  $("stage").addEventListener("click", function () {
+    if (speaking) { stopSpeaking(); return; }
+    conversation();
+  });
+  $("lookBtn").addEventListener("click", function () { handleText("What do you see?"); });
+  $("readBtn").addEventListener("click", function () { handleText("Read this."); });
+
+  function sendTyped() {
+    var box = $("text");
+    var value = box.value.trim();
+    if (!value) { return; }
+    box.value = "";
+    handleText(value);
+  }
+  $("sendBtn").addEventListener("click", sendTyped);
+  $("text").addEventListener("keydown", function (e) { if (e.key === "Enter") { sendTyped(); } });
+
+  addMessage("JARVIS", cfg.key
+    ? "JARVIS online, sir. Tap Talk, or the orb, and speak."
+    : "JARVIS online, sir. Open Settings and add your Groq key to begin.");
+
+  // ---------- the orb: geodesic core, pumping ring, bumping outer layer ----------
+  var FPS = 30;
+  var orb = $("orb");
+  var oc = orb.getContext("2d");
+  var W = 0, H = 0, CX = 0, CY = 0, R = 100, dpr = 1;
+
+  function resizeOrb() {
+    var box = orb.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = box.width;
+    H = box.height;
+    orb.width = Math.round(W * dpr);
+    orb.height = Math.round(H * dpr);
+    CX = W / 2;
+    CY = H / 2;
+    R = Math.min(W, H) * 0.44;
+  }
+  window.addEventListener("resize", resizeOrb);
+  resizeOrb();
+
+  var TARGET = {
+    idle:      { spin: 0.25, pump: 0.10, bump: 0.03, ball: 0.30, glow: 0.5 },
+    listening: { spin: 0.70, pump: 0.35, bump: 0.07, ball: 0.70, glow: 0.8 },
+    thinking:  { spin: 1.20, pump: 0.25, bump: 0.22, ball: 1.40, glow: 0.9 },
+    speaking:  { spin: 0.90, pump: 0.85, bump: 0.10, ball: 1.80, glow: 1.0 },
+    error:     { spin: 0.30, pump: 0.15, bump: 0.12, ball: 0.40, glow: 0.7 }
+  };
+  var cur = { spin: 0.25, pump: 0.10, bump: 0.03, ball: 0.30, glow: 0.5 };
+
+  var DOTS = 84;
+  var PTS = [];
+  var i, a, b;
+  for (i = 0; i < DOTS; i++) {
+    var py = 1 - 2 * (i + 0.5) / DOTS;
+    var pr = Math.sqrt(1 - py * py);
+    var pa = i * 2.399963;
+    PTS.push([Math.cos(pa) * pr, py, Math.sin(pa) * pr]);
+  }
+  var EDGES = [];
+  for (a = 0; a < DOTS; a++) {
+    for (b = a + 1; b < DOTS; b++) {
+      var dx = PTS[a][0] - PTS[b][0], dy = PTS[a][1] - PTS[b][1], dz = PTS[a][2] - PTS[b][2];
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 0.52) { EDGES.push([a, b]); }
+    }
+  }
+  var FLOAT = [];
+  for (i = 0; i < 120; i++) {
+    FLOAT.push({
+      a: Math.random() * 6.2832, k: Math.random() < 0.5 ? 0 : 1,
+      j: Math.random() * 2 - 1, s: 0.05 + Math.random() * 0.12,
+      size: 0.7 + Math.random() * 1.2
+    });
+  }
+
+  var T = 0, last = 0, ballAngle = 0, ringAngle = 0;
+
+  function layerR(angle, k) {
+    var beat = 0.75 + 0.25 * Math.sin(T * (4 + cur.bump * 20));
+    var amp = R * cur.bump * 0.28 * beat;
+    return R * (0.93 + 0.05 * k) + amp * (
+      Math.sin(angle * 5 + T * (1.5 + k) + k * 2) +
+      0.7 * Math.sin(angle * 8 - T * 2.3) +
+      0.5 * Math.sin(angle * 3 + T * 1.1)
+    );
+  }
+
+  function frameOrb(now) {
+    requestAnimationFrame(frameOrb);
+    if (now - last < 1000 / FPS) { return; }
+    var dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    T += dt;
+
+    var state = document.body.dataset.state || "idle";
+    var goal = TARGET[state] || TARGET.idle;
+    for (var key in goal) { cur[key] += (goal[key] - cur[key]) * 0.08; }
+    var rgb = state === "error" ? "255,59,59" : "53,214,214";
+
+    oc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    oc.clearRect(0, 0, W, H);
+
+    var glow = oc.createRadialGradient(CX, CY, R * 0.05, CX, CY, R * 0.95);
+    glow.addColorStop(0, "rgba(" + rgb + "," + (0.22 * cur.glow) + ")");
+    glow.addColorStop(0.6, "rgba(" + rgb + "," + (0.08 * cur.glow) + ")");
+    glow.addColorStop(1, "rgba(" + rgb + ",0)");
+    oc.fillStyle = glow;
+    oc.beginPath();
+    oc.arc(CX, CY, R * 0.95, 0, 6.2832);
+    oc.fill();
+
+    var k, n;
+    for (k = 0; k < 2; k++) {
+      oc.beginPath();
+      for (n = 0; n <= 100; n++) {
+        var ang = (n / 100) * 6.2832;
+        var rr = layerR(ang, k);
+        var lx = CX + Math.cos(ang) * rr, ly = CY + Math.sin(ang) * rr;
+        if (n === 0) { oc.moveTo(lx, ly); } else { oc.lineTo(lx, ly); }
+      }
+      oc.closePath();
+      oc.strokeStyle = "rgba(" + rgb + "," + (k === 0 ? 0.65 : 0.3) + ")";
+      oc.lineWidth = 1.2;
+      oc.stroke();
+    }
+    oc.fillStyle = "rgba(" + rgb + ",0.75)";
+    for (n = 0; n < FLOAT.length; n++) {
+      var q = FLOAT[n];
+      var pang = q.a + T * q.s * (0.3 + cur.spin * 0.5);
+      var prad = layerR(pang, q.k) + q.j * R * 0.03;
+      oc.beginPath();
+      oc.arc(CX + Math.cos(pang) * prad, CY + Math.sin(pang) * prad, q.size, 0, 6.2832);
+      oc.fill();
+    }
+
+    oc.lineWidth = 1;
+    oc.strokeStyle = "rgba(" + rgb + ",0.35)";
+    oc.setLineDash([2, 8]);
+    oc.lineDashOffset = -T * 20 * (0.5 + cur.spin);
+    oc.beginPath();
+    oc.arc(CX, CY, R * 0.86, 0, 6.2832);
+    oc.stroke();
+    oc.setLineDash([30, 12, 6, 12]);
+    oc.lineDashOffset = T * 30 * (0.5 + cur.spin);
+    oc.beginPath();
+    oc.arc(CX, CY, R * 0.46, 0, 6.2832);
+    oc.stroke();
+    oc.setLineDash([]);
+
+    var SEG = 48, step = 6.2832 / SEG, r1 = R * 0.50, r2 = R * 0.78;
+    ringAngle -= dt * cur.spin * 0.35;
+    for (n = 0; n < SEG; n++) {
+      var a0 = ringAngle + n * step, a1 = a0 + step * 0.78;
+      var wave = 0.5 + 0.5 * Math.sin(T * (3 + cur.pump * 14) + n * 0.9 + Math.sin(T * 2 + n * 0.4) * 1.5);
+      var level = Math.min(0.35 + cur.pump * wave * 0.8 + 0.1 * Math.sin(T + n), 1.15);
+      var ro = r1 + (r2 - r1) * level;
+      oc.beginPath();
+      oc.arc(CX, CY, ro, a0, a1);
+      oc.arc(CX, CY, r1, a1, a0, true);
+      oc.closePath();
+      oc.fillStyle = "rgba(" + rgb + "," + (0.18 + 0.5 * Math.min(level, 1)) + ")";
+      oc.fill();
+    }
+
+    ballAngle += dt * cur.ball;
+    var rs = R * 0.30 * (1 + 0.05 * cur.pump * Math.sin(T * 12));
+    var ca = Math.cos(ballAngle), sa = Math.sin(ballAngle), ct = Math.cos(0.4), st = Math.sin(0.4);
+    var P = [];
+    for (n = 0; n < DOTS; n++) {
+      var x = PTS[n][0], y = PTS[n][1], z = PTS[n][2];
+      var x1 = x * ca + z * sa, z1 = -x * sa + z * ca;
+      P.push([CX + x1 * rs, CY + (y * ct - z1 * st) * rs, y * st + z1 * ct]);
+    }
+    oc.beginPath();
+    oc.arc(CX, CY, rs, 0, 6.2832);
+    oc.fillStyle = "rgba(" + rgb + ",0.10)";
+    oc.fill();
+    oc.strokeStyle = "rgba(" + rgb + ",0.7)";
+    oc.lineWidth = 1.5;
+    oc.stroke();
+    oc.lineWidth = 0.8;
+    for (n = 0; n < EDGES.length; n++) {
+      var pa1 = P[EDGES[n][0]], pb1 = P[EDGES[n][1]];
+      var depth = (pa1[2] + pb1[2]) / 2;
+      oc.strokeStyle = "rgba(" + rgb + "," + (0.12 + 0.5 * (depth + 1) / 2) + ")";
+      oc.beginPath();
+      oc.moveTo(pa1[0], pa1[1]);
+      oc.lineTo(pb1[0], pb1[1]);
+      oc.stroke();
+    }
+  }
+  requestAnimationFrame(frameOrb);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
