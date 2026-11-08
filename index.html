@@ -13,27 +13,23 @@ const CONTACTS = {                          // names in small letters, leave emp
   // dad: "+256700000000",
   // me: "+256700000000"
 };
-/* Apps JARVIS may open: name: [what he calls it, Android package name].
-   These are Samsung package names. No websites are ever opened. */
-const APP_PACKAGES = {
-  whatsapp:   ["WhatsApp",   "com.whatsapp"],
-  boomplay:   ["Boomplay",   "com.afmobi.boomplayer"],
-  youtube:    ["YouTube",    "com.google.android.youtube"],
-  camera:     ["Camera",     "com.sec.android.app.camera"],
-  gallery:    ["Gallery",    "com.sec.android.gallery3d"],
-  maps:       ["Maps",       "com.google.android.apps.maps"],
-  chrome:     ["Chrome",     "com.android.chrome"],
-  phone:      ["Phone",      "com.samsung.android.dialer"],
-  messages:   ["Messages",   "com.samsung.android.messaging"],
-  gmail:      ["Gmail",      "com.google.android.gm"],
-  telegram:   ["Telegram",   "org.telegram.messenger"],
-  facebook:   ["Facebook",   "com.facebook.katana"],
-  instagram:  ["Instagram",  "com.instagram.android"],
-  tiktok:     ["TikTok",     "com.zhiliaoapp.musically"],
-  settings:   ["Settings",   "com.android.settings"],
-  calculator: ["Calculator", "com.sec.android.app.popupcalculator"],
-  files:      ["My Files",   "com.sec.android.app.myfiles"],
-  playstore:  ["Play Store", "com.android.vending"]
+/* Apps JARVIS may open. Chrome cannot start an app by its name, only through the
+   address the app registers itself. No website is ever opened. */
+const BOOMPLAY_PACKAGE = "com.afmobi.boomplayer";
+const APP_LINKS = {
+  whatsapp:  ["WhatsApp",   "intent://send/#Intent;scheme=whatsapp;end"],
+  youtube:   ["YouTube",    "intent://www.youtube.com/#Intent;scheme=vnd.youtube;end"],
+  telegram:  ["Telegram",   "intent://resolve#Intent;scheme=tg;end"],
+  facebook:  ["Facebook",   "intent://feed#Intent;scheme=fb;end"],
+  instagram: ["Instagram",  "intent://app#Intent;scheme=instagram;end"],
+  boomplay:  ["Boomplay",   "intent://www.boomplay.com/#Intent;scheme=https;package=" + BOOMPLAY_PACKAGE + ";end"],
+  maps:      ["Maps",       "geo:0,0?q="],
+  phone:     ["Phone",      "tel:"],
+  messages:  ["Messages",   "sms:"],
+  gmail:     ["Gmail",      "mailto:"],
+  playstore: ["Play Store", "market://details?id=com.android.vending"],
+  camera:    ["Camera",     "camera"],
+  gallery:   ["Gallery",    "gallery"]
 };
 /* ===================================================== */
 </script>
@@ -144,6 +140,8 @@ const APP_PACKAGES = {
     </div>
   </div>
 </div>
+<input id="camInput" type="file" accept="image/*" capture="environment" style="display:none">
+<input id="galInput" type="file" accept="image/*" style="display:none">
 
 <div id="settings">
   <h2>SETTINGS</h2>
@@ -202,8 +200,8 @@ const APP_PACKAGES = {
   };
 
   var APPS = {};
-  Object.keys(APP_PACKAGES).forEach(function (k) {
-    APPS[k] = { label: APP_PACKAGES[k][0], pkg: APP_PACKAGES[k][1] };
+  Object.keys(APP_LINKS).forEach(function (k) {
+    APPS[k] = { label: APP_LINKS[k][0], url: APP_LINKS[k][1] };
   });
 
   var VISION_MODELS = [
@@ -350,10 +348,7 @@ const APP_PACKAGES = {
     throw fail;
   }
 
-  // ---------- opening apps: launcher intents only, never a website ----------
-  function launcherUrl(pkg) {
-    return "intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=" + pkg + ";end";
-  }
+  // ---------- opening apps: through the address each app registers, never a website ----------
 
   // Android allows an app launch only just after a touch
   function canLaunch() {
@@ -404,16 +399,19 @@ const APP_PACKAGES = {
     if (run) { run(); }
   });
 
+  // The camera and gallery open through the phone's own photo picker
+  $("camInput").addEventListener("change", function () { this.value = ""; });
+  $("galInput").addEventListener("change", function () { this.value = ""; });
+
   var APP_ALIASES = {
     "wa": "whatsapp", "whats app": "whatsapp", "boom play": "boomplay",
     "you tube": "youtube", "yt": "youtube", "map": "maps", "google maps": "maps",
     "photos": "gallery", "pictures": "gallery", "photo gallery": "gallery",
-    "camera app": "camera", "browser": "chrome", "google chrome": "chrome", "google": "chrome",
-    "dialer": "phone", "phone app": "phone", "sms": "messages", "texts": "messages",
-    "messaging": "messages", "mail": "gmail", "email": "gmail", "e mail": "gmail",
-    "tg": "telegram", "setting": "settings", "calc": "calculator",
-    "my files": "files", "file manager": "files", "play store": "playstore",
-    "google play": "playstore", "store": "playstore"
+    "camera app": "camera", "dialer": "phone", "phone app": "phone",
+    "sms": "messages", "texts": "messages", "messaging": "messages",
+    "mail": "gmail", "email": "gmail", "e mail": "gmail",
+    "tg": "telegram", "fb": "facebook", "insta": "instagram",
+    "play store": "playstore", "google play": "playstore", "store": "playstore"
   };
 
   function appKey(spoken) {
@@ -427,18 +425,29 @@ const APP_PACKAGES = {
   async function openApp(spoken) {
     var key = appKey(spoken);
     if (!key) {
-      return "I do not know that app, sir. I can open " +
+      return "I cannot open that one from a web app, sir. I can open " +
         Object.keys(APPS).map(function (k) { return APPS[k].label; }).join(", ") + ".";
     }
     var app = APPS[key];
-    var url = launcherUrl(app.pkg);
+
+    if (app.url === "camera" || app.url === "gallery") {
+      var input = $(app.url === "camera" ? "camInput" : "galInput");
+      if (!canLaunch()) {
+        offerTap("Tap to open the " + app.label, function () { input.click(); });
+        return "Android needs one tap from you for that, sir. Tap the button to open the " + app.label + ".";
+      }
+      input.click();
+      silentReply = true;
+      return "Opening the " + app.label.toLowerCase() + ", sir.";
+    }
+
     if (!canLaunch()) {
       offerTap("Tap to open " + app.label, function () {
-        launch(url).then(function (ok) { if (!ok) { notInstalled(); } });
+        launch(app.url).then(function (ok) { if (!ok) { notInstalled(); } });
       });
       return "Android needs one tap from you for that, sir. Tap the button to open " + app.label + ".";
     }
-    var ok = await launch(url);
+    var ok = await launch(app.url);
     if (ok) { silentReply = true; return "Opening " + app.label + ", sir."; }
     return NOT_INSTALLED;
   }
@@ -451,12 +460,11 @@ const APP_PACKAGES = {
 
   // Search inside the Boomplay app. No website is ever opened.
   async function launchMusic(song) {
-    var pkg = APPS.boomplay.pkg;
     var search = "intent://www.boomplay.com/search/default/" + encodeURIComponent(song) +
-      "#Intent;scheme=https;package=" + pkg + ";end";
+      "#Intent;scheme=https;package=" + BOOMPLAY_PACKAGE + ";end";
     var ok = await launch(search);
     if (ok) { silentReply = true; return "Playing " + song + " on Boomplay, sir."; }
-    var ok2 = await launch(launcherUrl(pkg));
+    var ok2 = await launch(APPS.boomplay.url);
     if (ok2) {
       silentReply = true;
       return "I opened Boomplay, sir, but it would not take the search. Please search for " + song + " there.";
