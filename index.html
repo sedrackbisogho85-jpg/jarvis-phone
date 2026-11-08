@@ -182,6 +182,8 @@ const APP_PACKAGES = {
 
   function $(id) { return document.getElementById(id); }
 
+  function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
   // ---------- saved settings (kept on this phone only) ----------
   var store = {
     get: function (key, fallback) {
@@ -234,6 +236,7 @@ const APP_PACKAGES = {
   var talking = false;
   var currentRec = null;
   var speaking = false;
+  var lastSpoken = "";      // what JARVIS said last, so he can ignore his own echo
   var history = [];
   var pending = null;       // what JARVIS is waiting to hear: a song, a name, a number
   var silentReply = false;  // true when an app opened, so the reply is not spoken
@@ -464,7 +467,7 @@ const APP_PACKAGES = {
   async function playMusic(song) {
     song = cleanSong(song);
     if (!song || /^(music|songs?|something|a song|some music)$/i.test(song)) {
-      pending = { type: "song" };
+      pending = { type: "song", at: Date.now() };
       return "What should I play, sir?";
     }
     if (!canLaunch()) {
@@ -487,6 +490,19 @@ const APP_PACKAGES = {
     father: "dad", papa: "dad", daddy: "dad", myself: "me"
   };
 
+  var NUMBER_WORDS = {
+    zero: "0", oh: "0", o: "0", one: "1", two: "2", three: "3", four: "4",
+    five: "5", six: "6", seven: "7", eight: "8", nine: "9", plus: "+"
+  };
+
+  // "zero seven zero zero" becomes "0 7 0 0"
+  function spokenDigits(text) {
+    return String(text).toLowerCase().split(/\s+/).map(function (w) {
+      w = w.replace(/[.,!?]/g, "");
+      return NUMBER_WORDS.hasOwnProperty(w) ? NUMBER_WORDS[w] : w;
+    }).join(" ");
+  }
+
   function contactKey(spoken) {
     var s = String(spoken).toLowerCase().replace(/[^a-z ]/g, " ")
       .replace(/\b(my|the|please)\b/g, " ").replace(/\s+/g, " ").trim();
@@ -507,12 +523,12 @@ const APP_PACKAGES = {
 
   function callContact(spoken) {
     var key = contactKey(spoken);
-    if (!key) { pending = { type: "call" }; return "Who should I call, sir?"; }
+    if (!key) { pending = { type: "call", at: Date.now() }; return "Who should I call, sir?"; }
     var label = key.charAt(0).toUpperCase() + key.slice(1);
     var number = allContacts()[key];
     if (!number) {
-      pending = { type: "number", name: key };
-      return "What is " + label + "'s number, sir?";
+      pending = { type: "number", name: key, at: Date.now(), tries: 0 };
+      return "What is " + label + "'s number, sir? You can also say cancel.";
     }
     var href = "tel:" + number.replace(/[^\d+]/g, "");
     if (!canLaunch()) {
@@ -524,11 +540,7 @@ const APP_PACKAGES = {
   }
 
   function saveNumberAndCall(name, text) {
-    var digits = String(text).replace(/[^\d+]/g, "");
-    if (digits.replace(/\D/g, "").length < 7) {
-      pending = { type: "number", name: name };
-      return "I need the digits of the number, sir. Say it again, or say cancel.";
-    }
+    var digits = spokenDigits(text).replace(/[^\d+]/g, "");
     var saved = savedContacts();
     saved[name] = digits;
     store.set("jv_contacts", JSON.stringify(saved));
@@ -581,6 +593,7 @@ const APP_PACKAGES = {
   async function speak(text) {
     var clean = speakable(text);
     if (!clean || !window.speechSynthesis) { return; }
+    lastSpoken = clean;
     var parts = clean.match(/[^.!?]+[.!?]*/g) || [clean];
     speechSynthesis.cancel();
     speaking = true;
@@ -594,6 +607,16 @@ const APP_PACKAGES = {
   function stopSpeaking() {
     speaking = false;
     if (window.speechSynthesis) { speechSynthesis.cancel(); }
+  }
+
+  // True when the microphone only heard JARVIS's own voice
+  function isEcho(text) {
+    var heard = String(text).toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean);
+    if (heard.length < 3 || !lastSpoken) { return false; }
+    var said = {};
+    lastSpoken.toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).forEach(function (w) { said[w] = true; });
+    var hits = heard.filter(function (w) { return said[w]; }).length;
+    return hits / heard.length >= 0.7;
   }
 
   // ---------- listening ----------
@@ -801,14 +824,27 @@ const APP_PACKAGES = {
     var m;
     if (!t) { return "Yes, sir?"; }
 
-    // JARVIS asked a question and is waiting for the answer
+    // JARVIS asked a question and is waiting for the answer.
+    // A normal command always breaks out of the waiting.
+    if (pending && Date.now() - pending.at > 45000) { pending = null; }
     if (pending) {
       var p = pending;
       pending = null;
+      var isCommand = /^(open|launch|start|go to|play|call|phone|ring|dial|read|look|scan|what|who|how|why|add|new|remind|note|save|take|finish|complete|remove|delete)\b/.test(t);
       if (/^cancel\b/.test(t)) { return "Cancelled, sir."; }
-      if (p.type === "song") { return await playMusic(text); }
-      if (p.type === "call") { return callContact(text); }
-      if (p.type === "number") { return saveNumberAndCall(p.name, text); }
+      if (!isCommand) {
+        if (p.type === "song") { return await playMusic(text); }
+        if (p.type === "call") { return callContact(text); }
+        if (p.type === "number") {
+          var d = spokenDigits(text).replace(/[^\d+]/g, "");
+          if (d.replace(/\D/g, "").length >= 7) { return saveNumberAndCall(p.name, text); }
+          if ((p.tries || 0) < 1) {
+            pending = { type: "number", name: p.name, at: Date.now(), tries: 1 };
+            return "I need the digits of the number, sir. Say them again, or say cancel.";
+          }
+          return "Never mind, sir. Tell me when you have the number.";
+        }
+      }
     }
 
     // fast commands: no waiting for the AI, so Android still allows the app to open
@@ -891,6 +927,7 @@ const APP_PACKAGES = {
         if (quiet >= 4) { break; }
         continue;
       }
+      if (isEcho(r.text)) { continue; }   // that was JARVIS's own voice
       quiet = 0;
       var words = r.text.toLowerCase().split(/\s+/).map(function (w) { return w.replace(/[.,!?]/g, ""); });
       if (words.length <= 3 && words.some(function (w) { return w === "stop" || w === "goodbye" || w === "bye"; })) {
@@ -899,6 +936,7 @@ const APP_PACKAGES = {
         break;
       }
       await handleText(r.text);
+      await sleep(700);   // let the sound fade before listening again
     }
     talking = false;
     setState("idle");
@@ -909,15 +947,16 @@ const APP_PACKAGES = {
   async function askAndListen(question, type) {
     if (talking) { return; }
     stopWake();
-    pending = { type: type };
+    pending = { type: type, at: Date.now() };
     addMessage("JARVIS", question);
     setState("speaking");
     await speak(question);
+    await sleep(600);
     setState("listening");
     var r = await listenOnce();
     setState("idle");
-    if (r.text) { await handleText(r.text); }
-    else { resumeWake(); }
+    if (r.text && !isEcho(r.text)) { await handleText(r.text); }
+    else { pending = null; resumeWake(); }
   }
 
   // ---------- buttons ----------
@@ -986,6 +1025,7 @@ const APP_PACKAGES = {
     b.textContent = APPS[key].label;
     b.addEventListener("click", async function () {
       hideTap();
+      pending = null;
       silentReply = false;
       var reply = await openApp(key);
       addMessage("JARVIS", reply);
