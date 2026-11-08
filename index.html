@@ -2,6 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+/* ===================== EDIT HERE =====================
+   This repo is PUBLIC, so leave the key and the numbers EMPTY when you push.
+   Type them in Settings on the phone instead. They stay on the phone only. */
+const GROQ_API_KEY = "";                    // leave empty on GitHub
+const GROQ_MODEL = "openai/gpt-oss-20b";    // the model your Groq account accepts
+const CONTACTS = {                          // names in small letters, leave empty on GitHub
+  // mum: "+256700000000",
+  // dad: "+256700000000",
+  // me: "+256700000000"
+};
+/* ===================================================== */
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#031a1d">
 <link rel="manifest" href="manifest.json">
@@ -18,58 +31,90 @@
   #app {
     display:flex; flex-direction:column; height:100%;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
-    background:radial-gradient(circle at 50% 35%, #052a2e 0%, #000 75%);
+    background:radial-gradient(circle at 50% 30%, #07363b 0%, #031a1d 45%, #000 85%);
   }
   header {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:8px 14px; border-bottom:2px solid var(--c);
-    background:linear-gradient(rgba(53,214,214,.12), rgba(0,0,0,0));
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:8px 12px; border-bottom:2px solid var(--c);
+    background:linear-gradient(rgba(53,214,214,.16), rgba(0,0,0,0));
   }
-  h1 { margin:0; font-size:18px; letter-spacing:6px; font-weight:400; color:#d6f3f3; text-shadow:0 0 10px var(--c); }
+  h1 { margin:0; font-size:17px; letter-spacing:6px; font-weight:400; color:#e6fafa; text-shadow:0 0 12px var(--c); }
+  .hbtns { display:flex; gap:6px; }
   button {
-    font:inherit; color:var(--c); background:rgba(2,26,30,.8);
-    border:1px solid var(--c); border-radius:10px; padding:10px 12px;
+    font:inherit; color:var(--c); background:rgba(2,26,30,.75);
+    border:1px solid var(--c); border-radius:12px; padding:10px 12px;
+    backdrop-filter:blur(6px);
   }
-  button:active { background:rgba(53,214,214,.25); }
-  #stage { flex:1; position:relative; min-height:200px; }
+  button:active { background:rgba(53,214,214,.28); }
+  button.small { padding:6px 10px; font-size:13px; }
+  button.on { background:rgba(53,214,214,.25); box-shadow:0 0 10px var(--c); }
+  #stage { flex:1; position:relative; min-height:180px; }
   #orb { position:absolute; inset:0; width:100%; height:100%; }
-  #state { position:absolute; top:8px; left:12px; font-size:12px; letter-spacing:3px; color:var(--c); }
+  #state {
+    position:absolute; top:8px; left:12px; font-size:11px; letter-spacing:3px; color:var(--c);
+    border:1px solid rgba(53,214,214,.5); border-radius:20px; padding:3px 10px;
+  }
   #chat {
-    height:27vh; overflow-y:auto; padding:8px 12px; font-size:14px;
-    background:rgba(2,26,30,.7); border-top:1px solid rgba(53,214,214,.4);
+    height:22vh; overflow-y:auto; padding:8px 12px; font-size:14px;
+    background:rgba(2,26,30,.72); border-top:1px solid rgba(53,214,214,.4);
   }
   .msg { margin:6px 0; white-space:pre-wrap; user-select:text; }
   .who { color:var(--c); font-weight:700; }
-  #bar { padding:8px 10px; background:rgba(2,26,30,.9); }
+  a.tap {
+    display:inline-block; margin-top:6px; padding:8px 12px; color:var(--c);
+    border:1px solid var(--c); border-radius:12px; text-decoration:none;
+    background:rgba(53,214,214,.12);
+  }
+  .chips { display:flex; gap:6px; overflow-x:auto; padding:8px 10px 4px; background:rgba(2,26,30,.9); }
+  .chip { flex:0 0 auto; padding:8px 12px; font-size:13px; letter-spacing:1px; }
+  #bar { padding:6px 10px 8px; background:rgba(2,26,30,.9); }
   .row { display:flex; gap:6px; }
   .row + .row { margin-top:6px; }
-  .row button { flex:1; }
+  .row button { flex:1; padding:11px 4px; font-size:14px; }
   #text {
     flex:1; min-width:0; font:inherit; color:#e6f6f6; background:#02181b;
-    border:1px solid rgba(53,214,214,.5); border-radius:10px; padding:10px;
+    border:1px solid rgba(53,214,214,.5); border-radius:12px; padding:10px;
   }
-  #sendBtn { flex:0 0 auto; }
+  #sendBtn { flex:0 0 auto; padding:10px 16px; }
   #settings {
     position:fixed; inset:0; z-index:5; display:none; overflow:auto;
     padding:18px; background:rgba(3,26,29,.98);
   }
   #settings h2 { margin:0; color:var(--c); font-weight:400; letter-spacing:3px; }
   #settings label { display:block; margin:14px 0 4px; color:var(--c); font-size:13px; letter-spacing:1px; }
-  #settings input, #settings select {
+  #settings input, #settings select, #settings textarea {
     width:100%; font:inherit; color:#e6f6f6; background:#02181b;
-    border:1px solid rgba(53,214,214,.5); border-radius:10px; padding:10px;
+    border:1px solid rgba(53,214,214,.5); border-radius:12px; padding:10px;
   }
+  #settings textarea { min-height:90px; }
   #settings p { font-size:12px; opacity:.8; }
 </style>
 </head>
 <body data-state="idle">
 <div id="app">
-  <header><h1>J.A.R.V.I.S.</h1><button id="gear">Settings</button></header>
+  <header>
+    <h1>J.A.R.V.I.S.</h1>
+    <div class="hbtns">
+      <button id="wakeBtn" class="small">Wake: Off</button>
+      <button id="gear" class="small">Settings</button>
+    </div>
+  </header>
   <div id="stage"><canvas id="orb"></canvas><div id="state">IDLE</div></div>
   <div id="chat"></div>
+  <div class="chips">
+    <button class="chip" data-app="whatsapp">WhatsApp</button>
+    <button class="chip" data-app="boomplay">Boomplay</button>
+    <button class="chip" data-app="youtube">YouTube</button>
+    <button class="chip" data-app="camera">Camera</button>
+    <button class="chip" data-app="gallery">Gallery</button>
+    <button class="chip" data-app="maps">Maps</button>
+    <button class="chip" data-app="chrome">Chrome</button>
+  </div>
   <div id="bar">
     <div class="row">
       <button id="talkBtn">Talk</button>
+      <button id="musicBtn">Play Music</button>
+      <button id="callBtn">Call</button>
       <button id="lookBtn">Look</button>
       <button id="readBtn">Read</button>
     </div>
@@ -84,8 +129,10 @@
   <h2>SETTINGS</h2>
   <label>Groq key (stays on this phone only)</label>
   <input id="setKey" type="password" autocomplete="off" placeholder="paste your Groq key">
-  <label>Chat model (copy MODEL_NAME from your laptop config.py)</label>
+  <label>Chat model</label>
   <input id="setModel" type="text" autocomplete="off">
+  <label>Contacts (one per line, like: mum = +256700000000)</label>
+  <textarea id="setContacts" placeholder="mum = +256700000000&#10;dad = +256700000000&#10;me = +256700000000"></textarea>
   <label>Listening language (try another if he mishears you)</label>
   <select id="setLang">
     <option value="en-KE">English (Kenya)</option>
@@ -101,7 +148,7 @@
     <option value="environment">Back camera</option>
     <option value="user">Front camera</option>
   </select>
-  <p>Your key is saved only in this browser on this phone. Use a separate Groq key for the phone, so you can cancel it if the phone is lost.</p>
+  <p>Your key and contacts are saved only in this browser on this phone. Use a separate Groq key for the phone, so you can cancel it if the phone is lost.</p>
   <div class="row" style="margin-top:16px">
     <button id="saveBtn">Save</button>
     <button id="closeBtn">Close</button>
@@ -126,8 +173,8 @@
     }
   };
   var cfg = {
-    key: store.get("jv_key", ""),
-    model: store.get("jv_model", "llama-3.3-70b-versatile"),
+    key: store.get("jv_key", "") || GROQ_API_KEY,
+    model: store.get("jv_model", "") || GROQ_MODEL,
     lang: store.get("jv_lang", "en-KE"),
     cam: store.get("jv_cam", "environment")
   };
@@ -148,14 +195,14 @@
     "exactly: NO TEXT";
 
   function systemPrompt() {
-    return "You are JARVIS, a calm, confident, slightly witty assistant for a " +
-      "university Data Science student in Uganda. Address the user as sir " +
-      "naturally, about once per answer. Talk the way a fluent person talks " +
-      "to another person: warm, natural, complete sentences, usually two to " +
-      "five sentences unless sir asks for more detail. Never use bullet " +
-      "points, numbered lists, tables or symbols, because your words are " +
-      "spoken aloud. Explain things in simple English. The current date and " +
-      "time is " + new Date().toLocaleString() + ".";
+    return "You are Jarvis, a witty personal AI assistant. Keep answers short, " +
+      "fun, and helpful. If user asks to open an app, play music, or call " +
+      "someone, reply ONLY with a special command like OPEN whatsapp or PLAY " +
+      "song name or CALL mum. Never add any other words to a command. The " +
+      "apps you can open are whatsapp, boomplay, youtube, camera, gallery, " +
+      "maps and chrome. Otherwise address the user as sir now and then, and " +
+      "never use lists or symbols, because your words are spoken aloud. " +
+      "The current date and time is " + new Date().toLocaleString() + ".";
   }
 
   // ---------- screen basics ----------
@@ -163,13 +210,15 @@
   var currentRec = null;
   var speaking = false;
   var history = [];
+  var pending = null;   // what JARVIS is waiting to hear: a song, a name, a number
+  var outLink = null;   // a tap button to show with the next reply
 
   function setState(name) {
     document.body.dataset.state = name;
     $("state").textContent = name.toUpperCase();
   }
 
-  function addMessage(who, text) {
+  function addMessage(who, text, link) {
     var chat = $("chat");
     var row = document.createElement("div");
     row.className = "msg";
@@ -178,6 +227,14 @@
     name.textContent = who + ": ";
     row.appendChild(name);
     row.appendChild(document.createTextNode(text));
+    if (link) {
+      row.appendChild(document.createElement("br"));
+      var a = document.createElement("a");
+      a.className = "tap";
+      a.href = link.href;
+      a.textContent = link.label;
+      row.appendChild(a);
+    }
     chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
   }
@@ -208,7 +265,7 @@
     if (e && e.status === 401) { return "Your Groq key was rejected. Open settings and check it, sir."; }
     if (e && e.status === 429) { return "The rate limit was reached. Wait a little and try again, sir."; }
     if (e && (e.status === 400 || e.status === 404)) {
-      return "That model name was not accepted. Open settings and copy MODEL_NAME from your laptop config, sir.";
+      return "That model name was not accepted. Open settings and change the chat model, sir.";
     }
     if (e && e.name === "TypeError") { return "I cannot reach Groq. Check your internet, sir."; }
     if (e && e.friendly) { return e.message; }
@@ -226,8 +283,11 @@
       history.pop();
       throw e;
     }
-    history.push({ role: "assistant", content: answer });
-    return answer;
+    // The AI answers a command like OPEN whatsapp: do it, never show the code
+    var done = interpretCommand(answer);
+    var reply = done !== null ? done : answer;
+    history.push({ role: "assistant", content: reply });
+    return reply;
   }
 
   async function vision(picture, prompt, maxTokens) {
@@ -252,6 +312,131 @@
     var fail = new Error("None of the vision models answered, sir. " + ((last && last.message) || ""));
     fail.friendly = true;
     throw fail;
+  }
+
+  // ---------- opening apps (Android intent links) ----------
+  function intent(host, scheme, pkg, fallback) {
+    return "intent://" + host + "#Intent;scheme=" + scheme + ";package=" + pkg +
+      (fallback ? ";S.browser_fallback_url=" + encodeURIComponent(fallback) : "") + ";end";
+  }
+
+  var APPS = {
+    whatsapp: { label: "WhatsApp", url: intent("send/", "whatsapp", "com.whatsapp", "https://web.whatsapp.com") },
+    boomplay: { label: "Boomplay", url: intent("www.boomplay.com/", "https", "com.afmobi.boomplayer", "https://www.boomplay.com") },
+    youtube:  { label: "YouTube",  url: intent("www.youtube.com/", "https", "com.google.android.youtube", "https://www.youtube.com") },
+    maps:     { label: "Maps",     url: intent("maps.google.com/", "https", "com.google.android.apps.maps", "https://maps.google.com") },
+    chrome:   { label: "Chrome",   url: intent("www.google.com/", "https", "com.android.chrome", "https://www.google.com") },
+    camera:   { label: "the camera", url: "intent:#Intent;action=android.media.action.IMAGE_CAPTURE;end" },
+    gallery:  { label: "the gallery", url: "intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" }
+  };
+  var APP_ALIASES = {
+    "wa": "whatsapp", "whats app": "whatsapp", "boom play": "boomplay", "music": "boomplay",
+    "you tube": "youtube", "yt": "youtube", "map": "maps", "google maps": "maps",
+    "photos": "gallery", "pictures": "gallery", "photo gallery": "gallery",
+    "camera app": "camera", "browser": "chrome", "google chrome": "chrome", "google": "chrome"
+  };
+
+  function appKey(spoken) {
+    var s = String(spoken).toLowerCase().replace(/[^a-z ]/g, " ")
+      .replace(/\b(the|my|app|application)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (APPS[s]) { return s; }
+    if (APP_ALIASES[s]) { return APP_ALIASES[s]; }
+    return "";
+  }
+
+  function openApp(spoken) {
+    var key = appKey(spoken);
+    if (!key) {
+      return "I do not know that app, sir. I can open WhatsApp, Boomplay, YouTube, the camera, gallery, maps or Chrome.";
+    }
+    var app = APPS[key];
+    outLink = { label: "Tap to open " + app.label, href: app.url };
+    window.location.href = app.url;
+    return "Opening " + (app.label.charAt(0) === "t" ? app.label : app.label) + ", sir.";
+  }
+
+  // ---------- music on Boomplay ----------
+  function cleanSong(text) {
+    return String(text).replace(/\b(on boomplay|on boom play|please|for me)\b/gi, " ")
+      .replace(/^(some|a|the|me)\s+/i, "").replace(/[\"']/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  function playMusic(song) {
+    song = cleanSong(song);
+    if (!song || /^(music|songs?|something|a song|some music)$/i.test(song)) {
+      pending = { type: "song" };
+      return "What should I play, sir?";
+    }
+    var q = encodeURIComponent(song);
+    var web = "https://www.boomplay.com/search/default/" + q;
+    var url = "intent://www.boomplay.com/search/default/" + q +
+      "#Intent;scheme=https;package=com.afmobi.boomplayer;S.browser_fallback_url=" +
+      encodeURIComponent(web) + ";end";
+    outLink = { label: "Tap to open Boomplay", href: url };
+    window.location.href = url;
+    return "Playing " + song + " on Boomplay, sir.";
+  }
+
+  // ---------- calling contacts ----------
+  var CONTACT_ALIASES = {
+    mom: "mum", mommy: "mum", mother: "mum", mama: "mum", mummy: "mum",
+    father: "dad", papa: "dad", daddy: "dad", myself: "me"
+  };
+
+  function contactKey(spoken) {
+    var s = String(spoken).toLowerCase().replace(/[^a-z ]/g, " ")
+      .replace(/\b(my|the|please)\b/g, " ").replace(/\s+/g, " ").trim();
+    return CONTACT_ALIASES[s] || s;
+  }
+
+  function savedContacts() {
+    try { return JSON.parse(store.get("jv_contacts", "{}")) || {}; } catch (e) { return {}; }
+  }
+
+  function allContacts() {
+    var out = {};
+    Object.keys(CONTACTS).forEach(function (k) { out[k.toLowerCase()] = String(CONTACTS[k]); });
+    var saved = savedContacts();
+    Object.keys(saved).forEach(function (k) { out[k.toLowerCase()] = String(saved[k]); });
+    return out;
+  }
+
+  function callContact(spoken) {
+    var key = contactKey(spoken);
+    if (!key) { pending = { type: "call" }; return "Who should I call, sir?"; }
+    var label = key.charAt(0).toUpperCase() + key.slice(1);
+    var number = allContacts()[key];
+    if (!number) {
+      pending = { type: "number", name: key };
+      return "What is " + label + "'s number, sir?";
+    }
+    var href = "tel:" + number.replace(/[^\d+]/g, "");
+    outLink = { label: "Tap to call " + label, href: href };
+    window.location.href = href;
+    return "Calling " + label + " now, sir.";
+  }
+
+  function saveNumberAndCall(name, text) {
+    var digits = String(text).replace(/[^\d+]/g, "");
+    if (digits.replace(/\D/g, "").length < 7) {
+      pending = { type: "number", name: name };
+      return "I need the digits of the number, sir. Say it again, or say cancel.";
+    }
+    var saved = savedContacts();
+    saved[name] = digits;
+    store.set("jv_contacts", JSON.stringify(saved));
+    return callContact(name);
+  }
+
+  // The AI's special commands: OPEN xxx, PLAY xxx, CALL xxx
+  function interpretCommand(reply) {
+    var line = String(reply).replace(/[`"']/g, "").trim();
+    if (line.indexOf("\n") >= 0 || line.length > 90) { return null; }
+    var m = line.match(/^(OPEN|PLAY|CALL)\s+(.+)$/);
+    if (!m) { return null; }
+    if (m[1] === "OPEN") { return openApp(m[2]); }
+    if (m[1] === "PLAY") { return playMusic(m[2]); }
+    return callContact(m[2]);
   }
 
   // ---------- speaking ----------
@@ -327,6 +512,69 @@
       currentRec = rec;
       try { rec.start(); } catch (e) { finish({ error: "start-failed" }); }
     });
+  }
+
+  // ---------- optional "Hey Jarvis" listening ----------
+  var wakeOn = false;
+  var wakeRec = null;
+
+  function setWakeButton() {
+    $("wakeBtn").textContent = wakeOn ? "Wake: On" : "Wake: Off";
+    $("wakeBtn").className = "small" + (wakeOn ? " on" : "");
+  }
+
+  function stopWake() {
+    var r = wakeRec;
+    wakeRec = null;
+    try { if (r) { r.onend = null; r.abort(); } } catch (e) {}
+  }
+
+  function resumeWake() {
+    if (wakeOn && !wakeRec && !talking && !speaking) { startWake(); }
+  }
+
+  function startWake() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      addMessage("JARVIS", "This browser cannot listen for the wake word. Use Chrome, sir.");
+      wakeOn = false;
+      setWakeButton();
+      return;
+    }
+    if (wakeRec) { return; }
+    var rec = new SR();
+    rec.lang = cfg.lang;
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = function (e) {
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (!e.results[i].isFinal) { continue; }
+        var heard = e.results[i][0].transcript.toLowerCase();
+        var m = heard.match(/\bjarvis\b[,.!?\s]*(.*)$/);
+        if (m) { onWake(m[1].trim()); return; }
+      }
+    };
+    rec.onerror = function (e) {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        wakeOn = false;
+        setWakeButton();
+        addMessage("JARVIS", "The microphone is blocked, so the wake word is off, sir.");
+      }
+    };
+    rec.onend = function () {
+      wakeRec = null;
+      if (wakeOn && !talking && !speaking) { setTimeout(resumeWake, 400); }
+    };
+    wakeRec = rec;
+    try { rec.start(); } catch (e) { wakeRec = null; }
+  }
+
+  async function onWake(rest) {
+    if (talking) { return; }
+    stopWake();
+    if (rest) { await handleText(rest); }
+    else { await conversation(); }
+    resumeWake();
   }
 
   // ---------- tasks and notes (saved on this phone) ----------
@@ -439,8 +687,27 @@
 
   // ---------- what to do with what sir said ----------
   async function route(text) {
-    var t = text.toLowerCase().trim();
+    // take off a leading "Hey Jarvis"
+    text = text.replace(/^\s*(?:hey |hi |ok |okay )?jarvis[,.!?\s]*/i, "").trim();
+    var t = text.toLowerCase();
     var m;
+    if (!t) { return "Yes, sir?"; }
+
+    // JARVIS asked a question and is waiting for the answer
+    if (pending) {
+      var p = pending;
+      pending = null;
+      if (/^cancel\b/.test(t)) { return "Cancelled, sir."; }
+      if (p.type === "song") { return playMusic(text); }
+      if (p.type === "call") { return callContact(text); }
+      if (p.type === "number") { return saveNumberAndCall(p.name, text); }
+    }
+
+    // fast commands (no waiting for the AI, so Android allows the app to open)
+    if ((m = t.match(/^play(?: me)?\s*(.*)$/))) { return playMusic(m[1]); }
+    if ((m = t.match(/^(?:call|phone|ring|dial)\s+(.+)$/))) { return callContact(m[1]); }
+    if ((m = t.match(/^(?:open|launch|start|go to)\s+(.+)$/)) && appKey(m[1])) { return openApp(m[1]); }
+
     if (/\b(read this|read that|what does it say|what is written|read the text)\b/.test(t)) {
       return await camera("read", text);
     }
@@ -465,15 +732,19 @@
   }
 
   async function handleText(text) {
+    stopWake();
     addMessage("You", text);
     setState("thinking");
     var reply, failed = false;
+    outLink = null;
     try { reply = await route(text); }
     catch (e) { reply = friendlyError(e); failed = true; }
-    addMessage("JARVIS", reply);
+    addMessage("JARVIS", reply, outLink);
+    outLink = null;
     setState(failed ? "error" : "speaking");
     await speak(reply);
     setState("idle");
+    resumeWake();
   }
 
   async function conversation() {
@@ -482,9 +753,11 @@
       stopSpeaking();
       try { if (currentRec) { currentRec.abort(); } } catch (e) {}
       setState("idle");
+      resumeWake();
       return;
     }
     if (!cfg.key) { openSettings(); return; }
+    stopWake();
     talking = true;
     var quiet = 0;
     while (talking) {
@@ -519,14 +792,33 @@
     }
     talking = false;
     setState("idle");
+    resumeWake();
+  }
+
+  // Ask one question out loud, then listen for the answer
+  async function askAndListen(question, type) {
+    if (talking) { return; }
+    if (!cfg.key) { openSettings(); return; }
+    stopWake();
+    pending = { type: type };
+    addMessage("JARVIS", question);
+    setState("speaking");
+    await speak(question);
+    setState("listening");
+    var r = await listenOnce();
+    setState("idle");
+    if (r.text) { await handleText(r.text); }
+    else { resumeWake(); }
   }
 
   // ---------- buttons ----------
   function openSettings() {
+    var saved = savedContacts();
     $("setKey").value = cfg.key;
     $("setModel").value = cfg.model;
     $("setLang").value = cfg.lang;
     $("setCam").value = cfg.cam;
+    $("setContacts").value = Object.keys(saved).map(function (k) { return k + " = " + saved[k]; }).join("\n");
     $("setNote").textContent = "";
     $("settings").style.display = "block";
   }
@@ -534,13 +826,25 @@
   $("closeBtn").addEventListener("click", function () { $("settings").style.display = "none"; });
   $("saveBtn").addEventListener("click", function () {
     cfg.key = $("setKey").value.trim();
-    cfg.model = $("setModel").value.trim() || "llama-3.3-70b-versatile";
+    cfg.model = $("setModel").value.trim() || GROQ_MODEL;
     cfg.lang = $("setLang").value;
     cfg.cam = $("setCam").value;
     store.set("jv_key", cfg.key);
     store.set("jv_model", cfg.model);
     store.set("jv_lang", cfg.lang);
     store.set("jv_cam", cfg.cam);
+
+    var contacts = {};
+    $("setContacts").value.split("\n").forEach(function (line) {
+      var parts = line.split("=");
+      if (parts.length >= 2) {
+        var name = contactKey(parts[0]);
+        var number = parts.slice(1).join("=").replace(/[^\d+]/g, "");
+        if (name && number) { contacts[name] = number; }
+      }
+    });
+    store.set("jv_contacts", JSON.stringify(contacts));
+
     $("setNote").textContent = "Saved, sir.";
     setTimeout(function () { $("settings").style.display = "none"; }, 600);
   });
@@ -550,8 +854,30 @@
     if (speaking) { stopSpeaking(); return; }
     conversation();
   });
+  $("musicBtn").addEventListener("click", function () { askAndListen("What should I play, sir?", "song"); });
+  $("callBtn").addEventListener("click", function () { askAndListen("Who should I call, sir?", "call"); });
   $("lookBtn").addEventListener("click", function () { handleText("What do you see?"); });
   $("readBtn").addEventListener("click", function () { handleText("Read this."); });
+
+  $("wakeBtn").addEventListener("click", function () {
+    wakeOn = !wakeOn;
+    setWakeButton();
+    if (wakeOn) {
+      addMessage("JARVIS", "Listening for Hey Jarvis, sir. Keep this screen open.");
+      startWake();
+    } else {
+      stopWake();
+    }
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (btn) {
+    btn.addEventListener("click", function () {
+      outLink = null;
+      var reply = openApp(btn.getAttribute("data-app"));
+      addMessage("JARVIS", reply, outLink);
+      outLink = null;
+    });
+  });
 
   function sendTyped() {
     var box = $("text");
@@ -564,7 +890,7 @@
   $("text").addEventListener("keydown", function (e) { if (e.key === "Enter") { sendTyped(); } });
 
   addMessage("JARVIS", cfg.key
-    ? "JARVIS online, sir. Tap Talk, or the orb, and speak."
+    ? "JARVIS online, sir. Tap Talk, or type, and tell me what you need."
     : "JARVIS online, sir. Open Settings and add your Groq key to begin.");
 
   // ---------- the orb: geodesic core, pumping ring, bumping outer layer ----------
